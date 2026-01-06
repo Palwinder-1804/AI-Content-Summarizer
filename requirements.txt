@@ -1,0 +1,6 @@
+streamlit
+transformers
+torch
+langdetect
+deep-translator
+sentencepiece
