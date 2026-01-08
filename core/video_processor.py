@@ -1,34 +1,56 @@
 import re
 from youtube_transcript_api import YouTubeTranscriptApi
-from youtube_transcript_api._errors import TranscriptsDisabled, NoTranscriptFound
+from youtube_transcript_api._errors import (
+    TranscriptsDisabled,
+    NoTranscriptFound,
+    VideoUnavailable
+)
 
-def extract_video_id(url):
-    patterns = [
-        r"v=([a-zA-Z0-9_-]{11})",
-        r"youtu\.be/([a-zA-Z0-9_-]{11})",
-        r"embed/([a-zA-Z0-9_-]{11})"
-    ]
+# -------------------------------------------------
+# Validate transcript quality
+# -------------------------------------------------
+def is_valid_text(text: str) -> bool:
+    if not text:
+        return False
+    if len(text.split()) < 200:
+        return False
+    bad_markers = ["cnn.com", "ireport", "submit your photos"]
+    if any(b in text.lower() for b in bad_markers):
+        return False
+    return True
 
-    for pattern in patterns:
-        match = re.search(pattern, url)
-        if match:
-            return match.group(1)
 
-    return None
-
-def extract_video_text(url):
-    video_id = extract_video_id(url)
-
-    if not video_id:
-        return "Invalid YouTube URL."
+# -------------------------------------------------
+# MAIN FUNCTION (TRANSCRIPT ONLY)
+# -------------------------------------------------
+def extract_video_text(video_url: str) -> str:
+    """
+    Extract YouTube transcript ONLY.
+    No audio download.
+    No Whisper.
+    Ultra-fast.
+    """
 
     try:
-        transcript = YouTubeTranscriptApi.get_transcript(video_id)
-    except TranscriptsDisabled:
-        return "Transcripts are disabled for this video."
-    except NoTranscriptFound:
-        return "No transcript found for this video."
-    except Exception as e:
-        return f"Transcript error: {str(e)}"
+        match = re.search(r"(?:v=|youtu.be/)([^&]+)", video_url)
+        if not match:
+            return "❌ Invalid YouTube URL"
 
-    return " ".join([item["text"] for item in transcript])
+        video_id = match.group(1)
+
+        transcript = YouTubeTranscriptApi.get_transcript(video_id)
+        text = " ".join(seg["text"] for seg in transcript)
+
+        if not is_valid_text(text):
+            return "❌ Transcript too short or low quality"
+
+        return text
+
+    except TranscriptsDisabled:
+        return "❌ Transcripts are disabled for this video"
+    except NoTranscriptFound:
+        return "❌ No transcript available for this video"
+    except VideoUnavailable:
+        return "❌ Video unavailable"
+    except Exception as e:
+        return f"❌ Failed to extract transcript: {e}"
